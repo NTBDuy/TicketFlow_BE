@@ -42,6 +42,7 @@ public class User extends BaseEntity implements UserDetails {
     private boolean mustChangePassword;
 
     @ManyToMany(fetch = FetchType.LAZY)
+    @Builder.Default
     @JoinTable(
             name = "user_roles",
             joinColumns = @JoinColumn(
