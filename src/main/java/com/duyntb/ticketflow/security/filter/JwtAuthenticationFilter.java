@@ -60,7 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Claims claims = jwtService.parseAccessToken(jwt);
 
             Long userId = Long.parseLong(claims.getSubject());
-            Optional<User> optionalUser = userRepository.findById(userId);
+            Optional<User> optionalUser = userRepository.findByIdWithRolesAndPermissions(userId);
             if (optionalUser.isEmpty()) {
                 unauthorized(response, "Invalid token");
                 return;
