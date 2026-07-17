@@ -1,10 +1,11 @@
 package com.duyntb.ticketflow.user.dto;
 
-import com.duyntb.ticketflow.user.entity.Role;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.Set;
+
 public record UpdateUserRoleRequest (
-        @NotNull(message = "Role is required")
-        Role role
+        @NotNull(message = "Roles is required")
+        Set<String> roles
 ) {
 }

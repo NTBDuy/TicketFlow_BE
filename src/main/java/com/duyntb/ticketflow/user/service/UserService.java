@@ -12,6 +12,7 @@ import com.duyntb.ticketflow.security.SecurityUtils;
 import com.duyntb.ticketflow.user.dto.*;
 import com.duyntb.ticketflow.user.entity.Role;
 import com.duyntb.ticketflow.user.entity.User;
+import com.duyntb.ticketflow.user.repository.RoleRepository;
 import com.duyntb.ticketflow.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -19,10 +20,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.duyntb.ticketflow.user.specification.UserSpecifications.hasUser;
 
@@ -35,7 +39,9 @@ public class UserService {
     private final MailService mailService;
     private final MailTemplateService mailTemplateService;
     private final RedisTokenRevocationService tokenRedisService;
+    private final RoleRepository roleRepository;
 
+    @PreAuthorize("hasAuthority('USER_READ')")
     public PageResponse<UserResponse> getUsers(String keyword, int page, int size) {
         Specification<User> spec = Specification.where(hasUser(keyword));
 
@@ -47,11 +53,13 @@ public class UserService {
         return PageResponse.from(userPage);
     }
 
+    @PreAuthorize("hasAuthority('USER_READ')")
     public UserResponse getUserById(Long id) {
         return UserResponse.from(userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found")));
     }
 
+    @PreAuthorize("hasAuthority('USER_CREATE')")
     public CreateUserResponse createUser(CreateUserRequest request) {
         if (userRepository.existsByEmail(request.email())) {
             throw new BadRequestException("Email already exists");
@@ -60,12 +68,16 @@ public class UserService {
         String tempPwd = PasswordGenerator.generate(12);
         String pwd = passwordEncoder.encode(tempPwd);
 
+        Role defaultRole = roleRepository.findByName("USER")
+                .orElseThrow(() ->
+                        new IllegalStateException("Default USER role is not configured"));
+
         User user = User.builder()
                 .fullName(request.fullName())
                 .email(request.email())
                 .password(pwd)
-                .role(Role.USER)
                 .mustChangePassword(true)
+                .roles(Set.of(defaultRole))
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -73,6 +85,7 @@ public class UserService {
         return CreateUserResponse.from(savedUser, tempPwd);
     }
 
+    @PreAuthorize("hasAuthority('USER_UPDATE')")
     public UserResponse updateUser(Long id, UpdateUserRequest request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -87,6 +100,7 @@ public class UserService {
         return UserResponse.from(userRepository.save(user));
     }
 
+    @PreAuthorize("hasAuthority('USER_ROLE_UPDATE')")
     @Transactional
     public void updateUserRole(Long id, UpdateUserRoleRequest request) {
         Long currentUserId = securityUtils.getCurrentUserId();
@@ -97,15 +111,20 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (user.getRole() == request.role()) {
-            return;
+        Set<Role> roles = new HashSet<>(
+                roleRepository.findAllByNameIn(request.roles())
+        );
+
+        if (roles.size() != request.roles().size()) {
+            throw new IllegalStateException("One or more roles do not exist");
         }
 
-        user.setRole(request.role());
+        user.setRoles(roles);
 
         tokenRedisService.revokeAllTokensForUser(id);
     }
 
+    @PreAuthorize("hasAuthority('USER_DELETE')")
     @Transactional
     public void deleteUser(Long id) {
         Long currentUserId = securityUtils.getCurrentUserId();
@@ -122,6 +141,7 @@ public class UserService {
         user.setDeletedAt(LocalDateTime.now());
     }
 
+    @PreAuthorize("isAuthenticated()")
     @Transactional
     public void updatePassword(ChangePasswordRequest request) {
         User user = securityUtils.getCurrentUser();
@@ -141,6 +161,9 @@ public class UserService {
         tokenRedisService.revokeAllTokensForUser(user.getId());
     }
 
+    @PreAuthorize(
+            "hasAuthority('USER_PASSWORD_RESET')"
+    )
     public void resetPassword(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -153,6 +176,9 @@ public class UserService {
         sendResetPasswordByAdminMail(user, tempPassword);
     }
 
+    @PreAuthorize(
+            "hasAuthority('USER_LOCK_UPDATE')"
+    )
     @Transactional
     public void toggleUserLock(Long userId) {
         User user = userRepository.findById(userId)

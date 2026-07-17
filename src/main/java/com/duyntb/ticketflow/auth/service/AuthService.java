@@ -13,11 +13,13 @@ import com.duyntb.ticketflow.security.SecurityUtils;
 import com.duyntb.ticketflow.user.dto.UserResponse;
 import com.duyntb.ticketflow.user.entity.Role;
 import com.duyntb.ticketflow.user.entity.User;
+import com.duyntb.ticketflow.user.repository.RoleRepository;
 import com.duyntb.ticketflow.user.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -25,6 +27,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
@@ -42,6 +45,7 @@ public class AuthService {
     private final SecurityUtils securityUtils;
     private final AuthenticationManager authenticationManager;
     private final RefreshTokenService refreshTokenService;
+    private final RoleRepository roleRepository;
 
     @Transactional
     public void register(RegisterRequest request) {
@@ -55,12 +59,16 @@ public class AuthService {
             return;
         }
 
+        Role defaultRole = roleRepository.findByName("USER")
+                .orElseThrow(() ->
+                        new IllegalStateException("Default USER role is not configured"));
+
         User user = User.builder()
                 .fullName(request.fullName())
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
-                .role(Role.USER)
                 .enabled(false)
+                .roles(Set.of(defaultRole))
                 .build();
 
         userRepository.save(user);
@@ -109,6 +117,7 @@ public class AuthService {
         return TokenResponse.from(newAccessToken, newRefreshToken);
     }
 
+    @PreAuthorize("isAuthenticated()")
     public void logout(LogoutRequest request) {
         tokenRedisService.revokeToken(securityUtils.getJti());
 

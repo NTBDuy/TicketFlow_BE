@@ -1,6 +1,9 @@
 package com.duyntb.ticketflow.user.dto;
 
+import com.duyntb.ticketflow.user.entity.Role;
 import com.duyntb.ticketflow.user.entity.User;
+
+import java.util.stream.Collectors;
 
 public record UserResponse (
         Long id,
@@ -13,7 +16,9 @@ public record UserResponse (
                 user.getId(),
                 user.getFullName(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRoles().stream()
+                        .map(Role::getName)
+                        .collect(Collectors.joining(", "))
         );
     }
 }
