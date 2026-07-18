@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
             return ApiResponse.error(fieldName + " has invalid format");
         }
 
-        return ApiResponse.error("Invalid request body");
+        return ApiResponse.error("Invalid request data");
     }
 
     // ---------------------------------------------------------------------
